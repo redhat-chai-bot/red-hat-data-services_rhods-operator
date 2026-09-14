@@ -128,10 +128,10 @@ additional_meta:
     git.commit: aa12274076a6483237a0d429dca0dbad3658c789
   odh-kserve-autogluon-server:
     git.url: https://github.com/red-hat-data-services/kserve
-    git.commit: 3506aae024f898f46b653cb96c83b534a1232c5c
+    git.commit: aa12274076a6483237a0d429dca0dbad3658c789
   odh-kserve-controller:
     git.url: https://github.com/red-hat-data-services/kserve
-    git.commit: 3506aae024f898f46b653cb96c83b534a1232c5c
+    git.commit: aa12274076a6483237a0d429dca0dbad3658c789
   odh-kserve-llmisvc-controller:
     git.url: https://github.com/red-hat-data-services/kserve
     git.commit: aa12274076a6483237a0d429dca0dbad3658c789
@@ -185,7 +185,7 @@ additional_meta:
     git.commit: f638cbb463dc4911e642ca207c06775f4014a912
   odh-maas-controller:
     git.url: https://github.com/red-hat-data-services/models-as-a-service
-    git.commit: bb9b50beac819d3e49443721d9b207d310fa8bfe
+    git.commit: f638cbb463dc4911e642ca207c06775f4014a912
   odh-mcp-lifecycle-operator:
     git.url: https://github.com/red-hat-data-services/mcp-lifecycle-operator
     git.commit: cc66894be8cd87d35064e67ec02dbc6e5b5c3c89
@@ -227,7 +227,7 @@ additional_meta:
     git.commit: df8496ea07edfa85963b4a0484cb166fa9a7a835
   odh-model-registry:
     git.url: https://github.com/red-hat-data-services/model-registry
-    git.commit: 2f85a451a3098c6451541ca0418e51789de7d9ff
+    git.commit: ec001fa4cc6e348db7cc10b85cd69177f4659ff9
   odh-model-registry-job-async-upload:
     git.url: https://github.com/red-hat-data-services/model-registry
     git.commit: c74b3d15e75f6ee897875dee65bb4823cabdbedc
