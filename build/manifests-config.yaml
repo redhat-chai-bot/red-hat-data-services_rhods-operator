@@ -19,7 +19,7 @@ map:
     src: ray-operator/config
     dest: ray
     git.url: https://github.com/red-hat-data-services/kuberay
-    git.commit: a4be231c708ac5e435dab7f20e7fe740ce5a21db
+    git.commit: 0af5b3beedbade9278b8c36d31ab190eef0cf94a
   odh-trustyai-service-operator:
     src: config
     dest: trustyai
@@ -50,7 +50,7 @@ map:
     src: config
     dest: mlflowoperator
     git.url: https://github.com/red-hat-data-services/mlflow-operator
-    git.commit: 765dfc10f5aee59a111d8c9ead15816dff7f74ec
+    git.commit: b46ea6d84a0668f429a805088273f1dc58f7d468
   odh-spark-operator:
     src: config
     dest: sparkoperator
@@ -71,7 +71,7 @@ map:
     dest: feastoperator
     type: chart
     git.url: https://github.com/red-hat-data-services/feast-module-operator
-    git.commit: 4c2cc6e63c7dc8a632881840247235f9c1baec66
+    git.commit: 7f1237b659e1f68c2c1fa59ddcab37b43f6fa132
   odh-ogx-module-operator:
     src: ogx-module/config
     dest: ogx
