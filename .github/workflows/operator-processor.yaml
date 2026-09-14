@@ -416,7 +416,8 @@ jobs:
           git diff --staged --quiet || (git commit -m "Updating the operator repo with latest images and manifests" && git push origin HEAD:${{ steps.config.outputs.operator_ref }})
 
       # PR-only: PaC triggers the pull-request pipeline off this comment
-      # (see .tekton/odh-operator-pull-request.yaml, on-comment annotation).
+      # (see .tekton/rhods-operator-gap-pull-request.yaml, on-comment
+      # annotation), the same way early-gate is driven by /early-gate.
       - name: Post /build-konflux comment on PR
         if: github.event_name == 'pull_request'
         env:
