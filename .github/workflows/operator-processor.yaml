@@ -422,10 +422,10 @@ jobs:
       # This posts as github-actions[bot], which PaC ACL-checks like any other
       # sender.  It is not the org, Organizations.ListMembers never returns an
       # App bot and Repositories.IsCollaborator is false for one - so the only
-      # check it can pass is the OWNERS one, and github-actions[bot] is listed
-      # in the platform alias in OWNERS_ALIASES on main for exactly that.  PaC
-      # reads those files from the default branch, so that entry must stay on
-      # main even though the trigger fires on gap-poc PRs.
+      # check it can pass is the OWNERS one, so github-actions[bot] has to be
+      # an approver in OWNERS.  PaC reads that file from the default branch, so
+      # the entry must live on main even though the trigger fires on gap-poc
+      # PRs - adding it to this branch will not work.
       #
       # Without it the comment is rejected in silence - PaC skips posting the
       # denial status when the sender type is "Bot" - which is why four bot
