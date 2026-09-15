@@ -418,11 +418,44 @@ jobs:
       # PR-only: PaC triggers the pull-request pipeline off this comment
       # (see .tekton/rhods-operator-gap-pull-request.yaml, on-comment
       # annotation), the same way early-gate is driven by /early-gate.
+      #
+      # Not secrets.GITHUB_TOKEN.  PaC ACL-checks the sender of a GitOps
+      # comment, and github-actions[bot] passes none of the checks in
+      # aclCheckAll: it is not the org, Organizations.ListMembers never returns
+      # an App bot, and Repositories.IsCollaborator is false for one.  The
+      # rejection is silent - PaC skips posting the denial status when the
+      # sender type is "Bot" - which is why four bot /build-konflux comments on
+      # PR #3 produced no build and no error, while a human comment worked.
+      #
+      # rhods-ci-bot is a real user account with write on this repo, so it
+      # clears checkSenderRepoMembership (IsCollaborator).  That is the same
+      # path early-gate relies on: its trigger-early-gate-test task posts
+      # /early-gate-test as rhods-ci-bot via a dedicated 'commenter-token' from
+      # odh-github-secret, having explicitly abandoned the ambient PaC git-auth
+      # token.  Note the bot's opendatahub-io membership is private, so the
+      # org-membership check fails there too - collaborator access is what
+      # actually carries it, not the Member role.
       - name: Post /build-konflux comment on PR
         if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RHODS_CI_BOT_TOKEN }}
         run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::error::RHODS_CI_BOT_TOKEN is not set. Falling back to GITHUB_TOKEN would post as github-actions[bot], whose comment PaC rejects silently - no build, no error. Set it to a rhods-ci-bot PAT with write access to this repo."
+            exit 1
+          fi
+
+          # Identity is the whole point of this step, so make it visible in the
+          # log.  Prints the login only, never the token.
+          commenter=$(gh api user --jq .login)
+          echo "Commenting as: ${commenter}"
+          if [[ "${commenter}" == *"[bot]" ]]; then
+            echo "::error::Token resolves to ${commenter} (a GitHub App bot). PaC's ACL cannot match an App bot login; use a user-account PAT."
+            exit 1
+          fi
+
           gh pr comment "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \
             --body '/build-konflux'
