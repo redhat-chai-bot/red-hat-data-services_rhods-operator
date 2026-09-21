@@ -19,7 +19,6 @@ Package v1 contains API Schema definitions for the components v1 API group
 ### Resource Types
 - [DataSciencePipelines](#datasciencepipelines)
 - [Kueue](#kueue)
-- [Ray](#ray)
 - [TrustyAI](#trustyai)
 
 
@@ -156,6 +155,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed" : the operator is actively managing the component and trying to keep it active.<br />              It will only upgrade the component if it is safe to do so<br />- "Removed" : the operator is actively managing the component and will not install it,<br />              or if it is installed, the operator will try to remove it |  | Enum: [Managed Removed] <br /> |
+| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard:<br />the dashboard-operator Deployment stays up while either the core Dashboard<br />or the portal is Managed. This field round-trips through DashboardCommonSpec<br />and is projected verbatim onto the Dashboard CR as spec.maasConsumerPortal. | \{ managementState:Removed \} |  |
 
 
 #### DSCDashboardStatus
@@ -412,6 +412,23 @@ _Appears in:_
 
 
 DSCMLflowOperatorStatus contains the observed state of the MLflowOperator exposed in the DSC instance
+
+
+
+_Appears in:_
+- [ComponentsStatus](#componentsstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed" : the operator is actively managing the component and trying to keep it active.<br />              It will only upgrade the component if it is safe to do so<br />- "Removed" : the operator is actively managing the component and will not install it,<br />              or if it is installed, the operator will try to remove it |  | Enum: [Managed Removed] <br /> |
+
+
+#### DSCMaaSConsumerPortalStatus
+
+
+
+DSCMaaSConsumerPortalStatus contains the observed state of the MaaS Consumer
+Portal submodule (submodule of Dashboard) exposed in the DSC instance.
 
 
 
@@ -757,6 +774,9 @@ DashboardCommonSpec spec defines the shared desired state of Dashboard (used in 
 _Appears in:_
 - [DSCDashboard](#dscdashboard)
 
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard:<br />the dashboard-operator Deployment stays up while either the core Dashboard<br />or the portal is Managed. This field round-trips through DashboardCommonSpec<br />and is projected verbatim onto the Dashboard CR as spec.maasConsumerPortal. | \{ managementState:Removed \} |  |
 
 
 #### DashboardCommonStatus
@@ -1125,6 +1145,23 @@ _Appears in:_
 
 
 
+#### MaaSConsumerPortalSpec
+
+
+
+MaaSConsumerPortalSpec configures the MaaS Consumer Portal submodule lifecycle.
+
+
+
+_Appears in:_
+- [DSCDashboard](#dscdashboard)
+- [DashboardCommonSpec](#dashboardcommonspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed" : the operator is actively managing the component and trying to keep it active.<br />              It will only upgrade the component if it is safe to do so<br />- "Removed" : the operator is actively managing the component and will not install it,<br />              or if it is installed, the operator will try to remove it |  | Enum: [Managed Removed] <br /> |
+
+
 #### ModelCacheSpec
 
 
@@ -1272,27 +1309,6 @@ _Appears in:_
 | `Headed` |  |
 
 
-#### Ray
-
-
-
-Ray is the Schema for the rays API
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `components.platform.opendatahub.io/v1alpha1` | | |
-| `kind` _string_ | `Ray` | | |
-| `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
-| `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[RaySpec](#rayspec)_ |  |  |  |
-| `status` _[RayStatus](#raystatus)_ |  |  |  |
-
-
 #### RayCommonSpec
 
 
@@ -1303,7 +1319,6 @@ Ray is the Schema for the rays API
 
 _Appears in:_
 - [DSCRay](#dscray)
-- [RaySpec](#rayspec)
 
 
 
@@ -1317,33 +1332,6 @@ RayCommonStatus defines the shared observed state of Ray
 
 _Appears in:_
 - [DSCRayStatus](#dscraystatus)
-- [RayStatus](#raystatus)
-
-
-
-#### RaySpec
-
-
-
-RaySpec defines the desired state of Ray
-
-
-
-_Appears in:_
-- [Ray](#ray)
-
-
-
-#### RayStatus
-
-
-
-RayStatus defines the observed state of Ray
-
-
-
-_Appears in:_
-- [Ray](#ray)
 
 
 
@@ -1671,6 +1659,7 @@ _Appears in:_
 | `feastoperator` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | FeastOperator controls the Feast module operator lifecycle. |  |  |
 | `dashboard` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | Dashboard controls the Dashboard module operator lifecycle. |  |  |
 | `sparkoperator` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | SparkOperator controls the Spark Operator module lifecycle. |  |  |
+| `ray` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | Ray controls the Ray module lifecycle. |  |  |
 | `modelregistry` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | ModelRegistry controls the model-registry (AIHub) module operator lifecycle. |  |  |
 
 
@@ -1922,6 +1911,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `dashboard` _[DSCDashboardStatus](#dscdashboardstatus)_ | Dashboard component status. |  |  |
+| `maasConsumerPortal` _[DSCMaaSConsumerPortalStatus](#dscmaasconsumerportalstatus)_ | MaaSConsumerPortal submodule status (submodule of Dashboard). |  |  |
 | `workbenches` _[DSCWorkbenchesStatus](#dscworkbenchesstatus)_ | Workbenches component status. |  |  |
 | `workbenchesV2` _[DSCWorkbenchesV2Status](#dscworkbenchesv2status)_ | WorkbenchesV2 submodule status (submodule of Workbenches). |  |  |
 | `aipipelines` _[DSCDataSciencePipelinesStatus](#dscdatasciencepipelinesstatus)_ | AIPipelines component status. |  |  |
@@ -2267,6 +2257,22 @@ _Appears in:_
 
 
 
+#### DRASpec
+
+
+
+DRASpec defines the Dynamic Resource Allocation configuration for a HardwareProfile.
+
+
+
+_Appears in:_
+- [HardwareProfileSpec](#hardwareprofilespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `resourceClaimTemplateName` _string_ | ResourceClaimTemplateName names a pre-existing ResourceClaimTemplate in the workload's<br />namespace. The consuming module validates that the object exists at admission time. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br />Required: \{\} <br /> |
+
+
 #### GatewaySpec
 
 
@@ -2341,6 +2347,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `identifiers` _[HardwareIdentifier](#hardwareidentifier) array_ | The array of identifiers |  |  |
 | `scheduling` _[SchedulingSpec](#schedulingspec)_ | SchedulingSpec specifies how workloads using this hardware profile should be scheduled. |  |  |
+| `dra` _[DRASpec](#draspec)_ | DRA references an existing Dynamic Resource Allocation ResourceClaimTemplate that workloads<br />using this hardware profile should attach. The referenced object must already exist in the<br />workload's namespace and is not created, owned, or cleaned up by the operator. |  |  |
 
 
 #### HardwareProfileStatus
@@ -2439,6 +2446,22 @@ Package v1alpha1 contains API Schema definitions for the infrastructure v1alpha1
 
 
 
+#### DRASpec
+
+
+
+DRASpec defines the Dynamic Resource Allocation configuration for a HardwareProfile.
+
+
+
+_Appears in:_
+- [HardwareProfileSpec](#hardwareprofilespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `resourceClaimTemplateName` _string_ | ResourceClaimTemplateName names a pre-existing ResourceClaimTemplate in the workload's<br />namespace. The consuming module validates that the object exists at admission time. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br />Required: \{\} <br /> |
+
+
 #### HardwareIdentifier
 
 
@@ -2496,6 +2519,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `identifiers` _[HardwareIdentifier](#hardwareidentifier) array_ | The array of identifiers |  |  |
 | `scheduling` _[SchedulingSpec](#schedulingspec)_ | SchedulingSpec specifies how workloads using this hardware profile should be scheduled. |  |  |
+| `dra` _[DRASpec](#draspec)_ | DRA is mirrored here to preserve the field during conversion to and from v1.<br />It is not consumed by any v1alpha1 code path. |  |  |
 
 
 #### HardwareProfileStatus
