@@ -2,6 +2,13 @@ name: Bundle Sync CI
 
 on:
   workflow_dispatch:
+    inputs:
+      source_commit:
+        description: >-
+          Optional: pin CRD generation to a specific rhods-operator commit SHA.
+          Defaults to the branch HEAD when triggered manually.
+        required: false
+        type: string
 
   push:
     branches:
@@ -37,8 +44,12 @@ jobs:
         with:
           repository: ${{ env.GITHUB_ORG }}/rhods-operator
           path: source_repo
-          ref: ${{ github.ref_name }}  # Use the same branch name as in the event
+          ref: ${{ inputs.source_commit || github.sha }}  # Pin to exact triggering commit, not branch HEAD
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Record source commit SHA
+        id: source-ref
+        run: echo "source_sha=$(git -C source_repo rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Checkout target repo
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
@@ -85,4 +96,4 @@ jobs:
           git config user.name "Openshift-AI DevOps"
           git config user.email "openshift-ai-devops@redhat.com"
           git add -A
-          git diff --staged --quiet || (git commit -m "Sync changes from source repo" && git push origin ${{ github.ref_name }})
+          git diff --staged --quiet || (git commit -m "Sync bundle from rhods-operator@${{ steps.source-ref.outputs.source_sha }}" && git push origin ${{ github.ref_name }})
