@@ -16,10 +16,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	configApi "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
+	conditionstest "github.com/opendatahub-io/opendatahub-operator/v2/internal/testutil/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -43,7 +43,7 @@ type mockModuleHandler struct {
 	deleteErr error
 }
 
-func (m *mockModuleHandler) IsEnabled(_ *configv1alpha1.PlatformModules) bool { return false }
+func (m *mockModuleHandler) IsEnabled(_ *configApi.PlatformModules) bool { return false }
 
 func (m *mockModuleHandler) BuildModuleCR(_ context.Context, _ client.Client, _ *modules.DSCContext, _ *modules.ModuleCRConfig) (*unstructured.Unstructured, error) {
 	return nil, nil
@@ -89,7 +89,7 @@ func TestProvisionComponentsErrorLogs(t *testing.T) {
 			rr := &types.ReconciliationRequest{
 				Instance:   dsc,
 				Client:     tt.newClient(),
-				Conditions: conditions.NewManager(dsc, status.ConditionTypeComponentsReady),
+				Conditions: conditionstest.NewManager(dsc, status.ConditionTypeComponentsReady),
 			}
 
 			err := provisionComponentsWith(ctx, rr, newRegistry(tt.handler))
@@ -117,7 +117,7 @@ func TestProvisionComponentsAggregatesFailedComponents(t *testing.T) {
 	rr := &types.ReconciliationRequest{
 		Instance:   dsc,
 		Client:     fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		Conditions: conditions.NewManager(dsc, status.ConditionTypeComponentsReady),
+		Conditions: conditionstest.NewManager(dsc, status.ConditionTypeComponentsReady),
 	}
 
 	err := provisionComponentsWith(ctx, rr, newRegistry(handlers[0], handlers[1]))

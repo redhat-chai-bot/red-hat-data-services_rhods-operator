@@ -21,13 +21,14 @@ import (
 	ccmcommon "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/common"
 	ccmcharts "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/cloudmanager/common"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	conditionstest "github.com/opendatahub-io/opendatahub-operator/v2/internal/testutil/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/fakeclient"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
 
 	. "github.com/onsi/gomega"
 )
@@ -41,7 +42,13 @@ func monitorTestBuildFn(ctx context.Context, rr *types.ReconciliationRequest) (c
 	if !ok {
 		return ccmcharts.BuildResult{}, nil
 	}
-	result, err := ccmcharts.BuildHelmCharts(ctx, rr.Client, dp.GetDependencies(), "")
+	result, err := ccmcharts.BuildHelmCharts(
+		ctx,
+		rr.Client,
+		dp.GetDependencies(),
+		"",
+		rr.Instance,
+	)
 	if err != nil {
 		return ccmcharts.BuildResult{}, err
 	}
@@ -158,7 +165,7 @@ func TestMonitorDependencies(t *testing.T) {
 				Instance: instance,
 				Release:  fwapi.Release{Name: cluster.OpenDataHub},
 			}
-			rr.Conditions = conditions.NewManager(instance, status.ConditionTypeReady, ConditionsTypes...)
+			rr.Conditions = conditionstest.NewManager(instance, status.ConditionTypeReady, status.ConditionDependenciesReady)
 
 			action, err := NewReconcileAction(testResourceID, WithBuildChartsFn(monitorTestBuildFn))
 			g.Expect(err).ShouldNot(HaveOccurred())
@@ -167,13 +174,13 @@ func TestMonitorDependencies(t *testing.T) {
 			g.Expect(err).ShouldNot(HaveOccurred())
 
 			for condType, expected := range tt.expectedStatus {
-				cond := rr.Conditions.GetCondition(condType)
+				cond := rr.Conditions.GetCondition(fwapi.ConditionType(condType))
 				g.Expect(cond).NotTo(BeNil(), "condition %s should exist", condType)
 				g.Expect(cond.Status).To(Equal(expected), "condition %s status", condType)
 			}
 
 			for condType, expectedReason := range tt.expectedReasons {
-				cond := rr.Conditions.GetCondition(condType)
+				cond := rr.Conditions.GetCondition(fwapi.ConditionType(condType))
 				g.Expect(cond.Reason).To(Equal(expectedReason), "condition %s reason", condType)
 			}
 		})
@@ -187,6 +194,7 @@ func TestMonitorDependencies_OperatorCR(t *testing.T) {
 		condStatus       string
 		reason           string
 		message          string
+		conditions       []metav1.Condition
 		expectedStatus   metav1.ConditionStatus
 		expectedReason   string
 		expectedMsgMatch string
@@ -208,6 +216,16 @@ func TestMonitorDependencies_OperatorCR(t *testing.T) {
 			reason:         "Ready",
 			message:        "all good",
 			expectedStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "ambiguous CR status sets condition Unknown",
+			conditions: []metav1.Condition{
+				{Type: "Degraded", Status: metav1.ConditionTrue, Reason: "Broken", LastTransitionTime: metav1.Now()},
+				{Type: "Degraded", Status: metav1.ConditionFalse, Reason: "AsExpected", LastTransitionTime: metav1.Now()},
+			},
+			expectedStatus:   metav1.ConditionUnknown,
+			expectedReason:   "DependencyHealthUnknown",
+			expectedMsgMatch: "duplicate condition type",
 		},
 	}
 
@@ -257,16 +275,21 @@ func TestMonitorDependencies_OperatorCR(t *testing.T) {
 			g.Expect(cli.Create(ctx, operatorCR)).NotTo(HaveOccurred())
 			t.Cleanup(func() { _ = cli.Delete(ctx, operatorCR) })
 
-			setCRCondition(g, ctx, cli, operatorCR, tt.condType, tt.condStatus, tt.reason, tt.message)
+			if tt.conditions != nil {
+				g.Expect(testf.SetTypedConditions(operatorCR, tt.conditions)).NotTo(HaveOccurred())
+				g.Expect(cli.Status().Update(ctx, operatorCR)).NotTo(HaveOccurred())
+			} else {
+				setCRCondition(g, ctx, cli, operatorCR, tt.condType, tt.condStatus, tt.reason, tt.message)
+			}
 
-			conditionType := status.ConditionSailOperatorReady
+			conditionType := fwapi.ConditionType(status.ConditionSailOperatorReady)
 			instance := &ccmv1alpha1.AzureKubernetesEngine{}
 			rr := &types.ReconciliationRequest{
 				Client:   cli,
 				Instance: instance,
 				Release:  fwapi.Release{Name: cluster.OpenDataHub},
 			}
-			rr.Conditions = conditions.NewManager(instance, status.ConditionTypeReady, ConditionsTypes...)
+			rr.Conditions = conditionstest.NewManager(instance, status.ConditionTypeReady, status.ConditionDependenciesReady)
 
 			configs := []ccmcharts.DependencyMonitorConfig{
 				{
@@ -407,7 +430,7 @@ func TestMonitorDependencies_RHCL_OperatorCR(t *testing.T) {
 				Instance: instance,
 				Release:  fwapi.Release{Name: cluster.OpenDataHub},
 			}
-			rr.Conditions = conditions.NewManager(instance, status.ConditionTypeReady, ConditionsTypes...)
+			rr.Conditions = conditionstest.NewManager(instance, status.ConditionTypeReady, status.ConditionDependenciesReady)
 
 			action, err := NewReconcileAction(testResourceID, WithBuildChartsFn(monitorTestBuildFn))
 			g.Expect(err).ShouldNot(HaveOccurred())
@@ -509,7 +532,7 @@ func TestSummarizeDependencyStatus(t *testing.T) {
 				Instance: instance,
 				Release:  fwapi.Release{Name: cluster.OpenDataHub},
 			}
-			rr.Conditions = conditions.NewManager(instance, status.ConditionTypeReady, ConditionsTypes...)
+			rr.Conditions = conditionstest.NewManager(instance, status.ConditionTypeReady, status.ConditionDependenciesReady)
 
 			action, err := NewReconcileAction(testResourceID, WithBuildChartsFn(monitorTestBuildFn))
 			g.Expect(err).ShouldNot(HaveOccurred())

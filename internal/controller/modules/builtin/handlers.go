@@ -5,13 +5,14 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	aigatewayModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aigateway"
+	aihubModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aihub"
 	aipipelinesModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aipipelines"
 	dashboardModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/dashboard"
-	feastModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/feastoperator"
+	dataModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/data"
+	databaseserviceModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/databaseservice"
 	kserveModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/kserve"
 	mcplifecycleoperatorModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/mcplifecycleoperator"
 	mlflowOperatorModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/mlflowoperator"
-	modelregistryModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/modelregistry"
 	monitoringModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/monitoring"
 	ogxModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/ogx"
 	rayModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/ray"
@@ -41,11 +42,15 @@ var registrations = []ModuleRegistration{
 		Runlevel: dag.RL(20),
 	},
 	{
+		Handler:  databaseserviceModule.NewHandler(),
+		Runlevel: dag.RL(20),
+	},
+	{
 		Handler:  mcplifecycleoperatorModule.NewHandler(),
 		Runlevel: dag.RL(20),
 	},
 	{
-		Handler:  modelregistryModule.NewHandler(),
+		Handler:  aihubModule.NewHandler(),
 		Runlevel: dag.RL(20),
 	},
 	{
@@ -78,7 +83,7 @@ var registrations = []ModuleRegistration{
 		Runlevel: dag.RL(32),
 	},
 	{
-		Handler:  feastModule.NewHandler(),
+		Handler:  dataModule.NewHandler(),
 		Runlevel: dag.RL(32),
 	},
 	{

@@ -107,6 +107,10 @@ type PlatformModules struct {
 	// TrustyAI controls the TrustyAI module operator lifecycle.
 	// +optional
 	TrustyAI common.ManagementSpec `json:"trustyai,omitempty"`
+
+	// DatabaseService controls the shared database module operator lifecycle.
+	// +optional
+	DatabaseService common.ManagementSpec `json:"databaseservice,omitempty"`
 }
 
 // PlatformStatus defines the observed state of Platform.
@@ -116,7 +120,6 @@ type PlatformStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:storageversion
 // +kubebuilder:resource:scope=Cluster,shortName=odhp
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default'",message="Platform name must be default"
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Ready"

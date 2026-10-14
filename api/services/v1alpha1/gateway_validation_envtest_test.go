@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,31 +36,8 @@ import (
 // are valid URIs and are accepted. Downstream consumers must still treat the issuer URL
 // as untrusted input.
 func TestGatewayIssuerURLValidationEnvtest(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseDevMode(true)))
-
-	g := NewWithT(t)
-	ctx := context.Background()
-
-	projectDir, err := envtestutil.FindProjectRoot()
-	g.Expect(err).NotTo(HaveOccurred())
-
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join(projectDir, "config", "crd", "bases"),
-		},
-		ErrorIfCRDPathMissing: true,
-	}
-
-	cfg, err := testEnv.Start()
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(cfg).ToNot(BeNil())
-	defer func() {
-		g.Expect(testEnv.Stop()).To(Succeed())
-	}()
-
-	k8sClient, err := client.New(cfg, client.Options{Scheme: gatewayTestScheme()})
-	g.Expect(err).ToNot(HaveOccurred())
-
+	k8sClient := newGatewayValidationClient(t)
+	ctx := t.Context()
 	t.Run("certificate issuer kind is not defaulted by admission", func(t *testing.T) {
 		g := NewWithT(t)
 		gw := validGatewayWithIssuerURL("https://auth.example.com")
@@ -107,6 +85,47 @@ func TestGatewayIssuerURLValidationEnvtest(t *testing.T) {
 			})
 		}
 	})
+
+	for _, test := range []struct {
+		name      string
+		invalid   bool
+		duplicate bool
+	}{
+		{name: "alpha"},
+		{name: strings.Repeat("a", MaxAdditionalGatewayNameLength)},
+		{name: strings.Repeat("a", MaxAdditionalGatewayNameLength+1), invalid: true},
+		{name: "1alpha", invalid: true},
+		{name: "bad_name", invalid: true},
+		{name: "alpha-", invalid: true},
+		{name: DefaultGatewayName, invalid: true},
+		{name: XKSDefaultGatewayName, invalid: true},
+		{name: "duplicate", invalid: true, duplicate: true},
+	} {
+		t.Run("additional Gateway name: "+test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			gw := validGatewayWithIssuerURL("https://auth.example.com")
+			gw.Spec.IngressMode = IngressModeOcpRoute
+			gw.Spec.AdditionalIngresses = AdditionalIngresses{{
+				Name: test.name, Hostname: "alpha.example.com", IngressControllerName: "shard-alpha",
+				RouteLabels: map[string]string{"example.com/ingress": "alpha"},
+			}}
+			if test.duplicate {
+				gw.Spec.AdditionalIngresses = append(gw.Spec.AdditionalIngresses, AdditionalIngress{
+					Name: test.name, Hostname: "beta.example.com", IngressControllerName: "shard-beta",
+					RouteLabels: map[string]string{"example.com/ingress": "beta"},
+				})
+			}
+			err := k8sClient.Create(ctx, gw)
+			if err == nil {
+				g.Expect(k8sClient.Delete(ctx, gw)).To(Succeed())
+			}
+			if test.invalid {
+				g.Expect(k8serrors.IsInvalid(err)).To(BeTrue())
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
 
 	// MaxLength boundary strings: both are otherwise-valid HTTPS URLs padded in the
 	// path with an allowed character, so length is the only thing under test.
@@ -169,11 +188,196 @@ func TestGatewayIssuerURLValidationEnvtest(t *testing.T) {
 	}
 }
 
-func TestGatewayListenerPortImmutableEnvtest(t *testing.T) {
+func TestGatewayAdditionalIngressValidationEnvtest(t *testing.T) {
+	k8sClient := newGatewayValidationClient(t)
+	ctx := t.Context()
+	authCases := []struct {
+		name    string
+		auth    string
+		maximum int32
+		wantErr string
+		wantKey string
+	}{
+		{name: "omitted auth", maximum: 10},
+		{name: "empty auth", auth: `{}`, maximum: 10},
+		{name: "maximum equals fixed minimum", auth: `{"maxReplicas":2}`, maximum: 2},
+		{name: "configured maximum", auth: `{"maxReplicas":4}`, maximum: 4},
+		{name: "largest maximum", auth: `{"maxReplicas":10}`, maximum: 10},
+		{name: "zero maximum", auth: `{"maxReplicas":0}`, wantErr: "maxReplicas"},
+		{name: "maximum below minimum", auth: `{"maxReplicas":1}`, wantErr: "maxReplicas"},
+		{name: "maximum above limit", auth: `{"maxReplicas":11}`, wantErr: "maxReplicas"},
+		{name: "missing Secret key", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc"}}}`, wantErr: "key"},
+		{name: "OIDC explicit key", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc","key":"clientSecret"}}}`, maximum: 10, wantKey: "clientSecret"},
+		{name: "OIDC custom key", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc","key":"credentials"}}}`, maximum: 10, wantKey: "credentials"},
+		{name: "required Secret", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc","key":"clientSecret","optional":false}}}`, maximum: 10, wantKey: "clientSecret"},
+		{name: "optional Secret", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc","key":"clientSecret","optional":true}}}`, wantErr: "clientSecretRef.optional"},
+		{name: "missing client ID", auth: `{"oidc":{"clientSecretRef":{"name":"alpha-oidc","key":"clientSecret"}}}`, wantErr: "clientID"},
+		{name: "empty client ID", auth: `{"oidc":{"clientID":"","clientSecretRef":{"name":"alpha-oidc","key":"clientSecret"}}}`, wantErr: "clientID"},
+		{name: "missing Secret reference", auth: `{"oidc":{"clientID":"alpha-client"}}`, wantErr: "clientSecretRef"},
+		{name: "missing Secret name", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"key":"clientSecret"}}}`, wantErr: "clientSecretRef.name"},
+		{name: "empty Secret name", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"","key":"clientSecret"}}}`, wantErr: "clientSecretRef.name"},
+		{name: "empty Secret key", auth: `{"oidc":{"clientID":"alpha-client","clientSecretRef":{"name":"alpha-oidc","key":""}}}`, wantErr: "key"},
+	}
+	for _, target := range []string{"additional ingress", "default gateway"} {
+		for _, tc := range authCases {
+			if target == "default gateway" && strings.Contains(tc.auth, "oidc") {
+				continue
+			}
+			t.Run(target+" auth: "+tc.name, func(t *testing.T) {
+				g := NewWithT(t)
+				ingress := map[string]interface{}{
+					"name": "alpha", "hostname": "alpha.example.com",
+					"ingressControllerName": "shard-a", "routeLabels": map[string]interface{}{"example.com/ingress": "alpha"},
+				}
+				var auth map[string]interface{}
+				if tc.auth != "" {
+					g.Expect(json.Unmarshal([]byte(tc.auth), &auth)).To(Succeed())
+					ingress["auth"] = auth
+				}
+				config := &unstructured.Unstructured{Object: map[string]interface{}{
+					"apiVersion": GroupVersion.String(), "kind": GatewayConfigKind,
+					"metadata": map[string]interface{}{"name": GatewayConfigName},
+					"spec": map[string]interface{}{
+						"ingressMode": string(IngressModeOcpRoute), "additionalIngresses": []interface{}{ingress},
+					},
+				}}
+				if target == "default gateway" {
+					delete(ingress, "auth")
+					if maximum, ok := auth["maxReplicas"]; ok {
+						config.Object["spec"].(map[string]interface{})["authProxyMaxReplicas"] = maximum
+					}
+				}
+				err := k8sClient.Create(ctx, config)
+				if err == nil {
+					t.Cleanup(func() { g.Expect(k8sClient.Delete(ctx, config)).To(Succeed()) })
+				}
+				if tc.wantErr != "" {
+					g.Expect(k8serrors.IsInvalid(err)).To(BeTrue())
+					wantErr := tc.wantErr
+					if target == "default gateway" {
+						wantErr = "authProxyMaxReplicas"
+					}
+					g.Expect(err.Error()).To(ContainSubstring(wantErr))
+					return
+				}
+				g.Expect(err).NotTo(HaveOccurred())
+				var observed GatewayConfig
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: GatewayConfigName}, &observed)).To(Succeed())
+				ingressAuth := observed.Spec.AdditionalIngresses[0].Auth
+				if target == "default gateway" {
+					ingressAuth = AdditionalIngressAuth{MaxReplicas: observed.Spec.AuthProxyMaxReplicas}
+				}
+				g.Expect(ingressAuth.MaxReplicas).NotTo(BeNil())
+				g.Expect(*ingressAuth.MaxReplicas).To(Equal(tc.maximum))
+				if tc.wantKey != "" {
+					g.Expect(ingressAuth.OIDC).NotTo(BeNil())
+					g.Expect(ingressAuth.OIDC.ClientSecretRef.Key).To(Equal(tc.wantKey))
+					g.Expect(ingressAuth.OIDC.SecretNamespace).To(BeEmpty())
+				} else {
+					g.Expect(ingressAuth.OIDC).To(BeNil())
+				}
+			})
+		}
+
+	}
+}
+
+func TestGatewayOCPRouteServerTimeoutValidationEnvtest(t *testing.T) {
+	k8sClient := newGatewayValidationClient(t)
+	ctx := t.Context()
+	for _, test := range []struct {
+		name    string
+		config  map[string]any
+		invalid bool
+	}{
+		{name: "omitted"},
+		{name: "empty configuration", config: map[string]any{}},
+		{name: "seconds", config: map[string]any{"serverTimeout": "330s"}},
+		{name: "milliseconds", config: map[string]any{"serverTimeout": "1ms"}},
+		{name: "minutes", config: map[string]any{"serverTimeout": "10m"}},
+		{name: "hours", config: map[string]any{"serverTimeout": "1h"}},
+		{name: "maximum", config: map[string]any{"serverTimeout": "2147483647ms"}},
+		{name: "empty timeout", config: map[string]any{"serverTimeout": ""}, invalid: true},
+		{name: "zero", config: map[string]any{"serverTimeout": "0s"}, invalid: true},
+		{name: "zero with leading zeros", config: map[string]any{"serverTimeout": "000ms"}, invalid: true},
+		{name: "seconds with leading zero", config: map[string]any{"serverTimeout": "0330s"}, invalid: true},
+		{name: "milliseconds with leading zeros", config: map[string]any{"serverTimeout": "001ms"}, invalid: true},
+		{name: "minutes with leading zero", config: map[string]any{"serverTimeout": "010m"}, invalid: true},
+		{name: "hours with leading zero", config: map[string]any{"serverTimeout": "01h"}, invalid: true},
+		{name: "negative", config: map[string]any{"serverTimeout": "-30s"}, invalid: true},
+		{name: "missing unit", config: map[string]any{"serverTimeout": "330"}, invalid: true},
+		{name: "unsupported unit", config: map[string]any{"serverTimeout": "1ns"}, invalid: true},
+		{name: "fractional", config: map[string]any{"serverTimeout": "0.5s"}, invalid: true},
+		{name: "compound", config: map[string]any{"serverTimeout": "5m30s"}, invalid: true},
+		{name: "above maximum", config: map[string]any{"serverTimeout": "2147483648ms"}, invalid: true},
+		{name: "overflow", config: map[string]any{"serverTimeout": "999999999999999h"}, invalid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+			for _, mode := range []IngressMode{"", IngressModeOcpRoute, IngressModeLoadBalancer} {
+				gatewayConfig := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": GroupVersion.String(),
+					"kind":       GatewayConfigKind,
+					"metadata":   map[string]any{"name": GatewayConfigName},
+					"spec":       map[string]any{},
+				}}
+				if mode != "" {
+					g.Expect(unstructured.SetNestedField(gatewayConfig.Object, string(mode), "spec", "ingressMode")).To(Succeed())
+				}
+				if test.config != nil {
+					g.Expect(unstructured.SetNestedMap(gatewayConfig.Object, test.config, "spec", "ocpRoute")).To(Succeed())
+				}
+				err := k8sClient.Create(t.Context(), gatewayConfig)
+				if err == nil {
+					g.Expect(k8sClient.Delete(t.Context(), gatewayConfig)).To(Succeed())
+				}
+				if test.invalid {
+					g.Expect(k8serrors.IsInvalid(err)).To(BeTrue(), "mode %s: %v", mode, err)
+					g.Expect(err.Error()).To(ContainSubstring("serverTimeout"))
+				} else if mode == IngressModeLoadBalancer && test.config != nil {
+					g.Expect(k8serrors.IsInvalid(err)).To(BeTrue(), "mode %s: %v", mode, err)
+					g.Expect(err.Error()).To(ContainSubstring("ocpRoute is only valid in OcpRoute ingress mode"))
+				} else {
+					g.Expect(err).NotTo(HaveOccurred(), "mode %s", mode)
+				}
+			}
+		})
+	}
+
+	t.Run("switching to LoadBalancer requires removing ocpRoute", func(t *testing.T) {
+		g := NewWithT(t)
+		config := &GatewayConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: GatewayConfigName},
+			Spec: GatewayConfigSpec{
+				IngressMode: IngressModeOcpRoute,
+				OCPRoute:    &OCPRouteConfig{ServerTimeout: "330s"},
+			},
+		}
+		g.Expect(k8sClient.Create(t.Context(), config)).To(Succeed())
+		t.Cleanup(func() { g.Expect(k8sClient.Delete(ctx, config)).To(Succeed()) })
+		config.Spec.IngressMode = IngressModeLoadBalancer
+		err := k8sClient.Update(t.Context(), config)
+		g.Expect(k8serrors.IsInvalid(err)).To(BeTrue())
+		g.Expect(err.Error()).To(ContainSubstring("ocpRoute is only valid in OcpRoute ingress mode"))
+		g.Expect(k8sClient.Get(t.Context(), client.ObjectKeyFromObject(config), config)).To(Succeed())
+		g.Expect(config.Spec.IngressMode).To(Equal(IngressModeOcpRoute))
+		config.Spec.IngressMode = IngressModeLoadBalancer
+		config.Spec.OCPRoute = nil
+		g.Expect(k8sClient.Update(t.Context(), config)).To(Succeed())
+		g.Expect(k8sClient.Get(t.Context(), client.ObjectKeyFromObject(config), config)).To(Succeed())
+		g.Expect(config.Spec.IngressMode).To(Equal(IngressModeLoadBalancer))
+		g.Expect(config.Spec.OCPRoute).To(BeNil())
+	})
+}
+
+// newGatewayValidationClient starts an independent API server for each validation
+// group and stops it after the group's subtests and their cleanup have completed.
+func newGatewayValidationClient(t *testing.T) client.Client {
+	t.Helper()
+
 	logf.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseDevMode(true)))
 
 	g := NewWithT(t)
-	ctx := context.Background()
 
 	projectDir, err := envtestutil.FindProjectRoot()
 	g.Expect(err).NotTo(HaveOccurred())
@@ -188,39 +392,12 @@ func TestGatewayListenerPortImmutableEnvtest(t *testing.T) {
 	cfg, err := testEnv.Start()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cfg).ToNot(BeNil())
-	defer func() {
-		g.Expect(testEnv.Stop()).To(Succeed())
-	}()
+	t.Cleanup(func() { g.Expect(testEnv.Stop()).To(Succeed()) })
 
 	k8sClient, err := client.New(cfg, client.Options{Scheme: gatewayTestScheme()})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	gatewayConfig := &GatewayConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: GatewayConfigName},
-		Spec: GatewayConfigSpec{
-			IngressMode: IngressModeOcpRoute,
-			AdditionalIngresses: AdditionalIngresses{{
-				Name:                  "alpha",
-				Hostname:              "alpha.example.com",
-				ListenerPort:          9443,
-				IngressControllerName: "shard-a",
-				RouteLabels:           map[string]string{"example.com/ingress": "alpha"},
-			}},
-		},
-	}
-	g.Expect(k8sClient.Create(ctx, gatewayConfig)).To(Succeed())
-	defer func() {
-		g.Expect(k8sClient.Delete(ctx, gatewayConfig)).To(Succeed())
-	}()
-
-	current := &GatewayConfig{}
-	g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: GatewayConfigName}, current)).To(Succeed())
-	current.Spec.AdditionalIngresses[0].ListenerPort = 9444
-
-	err = k8sClient.Update(ctx, current)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(k8serrors.IsInvalid(err)).To(BeTrue())
-	g.Expect(err.Error()).To(ContainSubstring("ListenerPort is immutable"))
+	return k8sClient
 }
 
 func gatewayTestScheme() *runtime.Scheme {

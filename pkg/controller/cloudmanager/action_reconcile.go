@@ -14,13 +14,12 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/helm"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-var ConditionsTypes = []string{
-	status.ConditionDependenciesReady,
-}
+var ConditionsTypes = reconciler.DependentConditions(status.ConditionDependenciesReady)
 
 // reconcileAction holds the configuration for the combined reconcile action.
 type reconcileAction struct {
@@ -65,7 +64,13 @@ func buildCharts(ctx context.Context, rr *types.ReconciliationRequest) (ccmchart
 		return ccmcharts.BuildResult{}, fmt.Errorf("instance %T does not implement KubernetesEngineInstance", rr.Instance)
 	}
 
-	return ccmcharts.BuildHelmCharts(ctx, rr.Client, dp.GetDependencies(), rr.ChartsBasePath)
+	return ccmcharts.BuildHelmCharts(
+		ctx,
+		rr.Client,
+		dp.GetDependencies(),
+		rr.ChartsBasePath,
+		rr.Instance,
+	)
 }
 
 func filterCRs(resources []unstructured.Unstructured, crs []types.OperatorCR) []unstructured.Unstructured {

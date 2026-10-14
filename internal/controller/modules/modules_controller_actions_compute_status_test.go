@@ -13,12 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
-	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	configApi "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha2"
+	dscApi "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	conditionstest "github.com/opendatahub-io/opendatahub-operator/v2/internal/testutil/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/fakeclient"
 
@@ -34,7 +34,7 @@ type statusTestHandler struct {
 	crState      CRState
 }
 
-func (m *statusTestHandler) IsEnabled(_ *configv1alpha1.PlatformModules) bool {
+func (m *statusTestHandler) IsEnabled(_ *configApi.PlatformModules) bool {
 	return m.enabled
 }
 
@@ -96,14 +96,14 @@ func setupStatusTest(t *testing.T, handlers ...*statusTestHandler) (*odhtype.Rec
 		r.Add(h)
 	}
 
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscApi.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsc"},
 	}
 
 	cli, err := fakeclient.New()
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	cm := conditions.NewManager(dsc, status.ConditionTypeReady, condTypes...)
+	cm := conditionstest.NewManager(dsc, status.ConditionTypeReady, condTypes...)
 
 	rr := &odhtype.ReconciliationRequest{
 		Client:     cli,
@@ -128,7 +128,7 @@ func setupStatusTestAggregateOnly(t *testing.T, handlers ...*statusTestHandler) 
 		r.Add(h)
 	}
 
-	platform := &configv1alpha1.Platform{
+	platform := &configApi.Platform{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	}
 
@@ -142,7 +142,7 @@ func setupStatusTestAggregateOnly(t *testing.T, handlers ...*statusTestHandler) 
 	cli, err := fakeclient.New(fakeclient.WithObjects(dsci))
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	cm := conditions.NewManager(platform, status.ConditionTypeReady, status.ConditionTypeModulesReady)
+	cm := conditionstest.NewManager(platform, status.ConditionTypeReady, status.ConditionTypeModulesReady)
 
 	rr := &odhtype.ReconciliationRequest{
 		Client:     cli,
@@ -204,13 +204,13 @@ func TestComputeModulesStatusDetailed_SkipsDSCIConfiguredModules(t *testing.T) {
 	r.Add(hDSCI, WithConfigSource(ConfigFromDSCI))
 	t.Cleanup(func() { r = oldR })
 
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscApi.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsc"},
 	}
 	cli, err := fakeclient.New()
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	cm := conditions.NewManager(dsc, status.ConditionTypeReady,
+	cm := conditionstest.NewManager(dsc, status.ConditionTypeReady,
 		"AIGatewayReady", status.ConditionTypeModulesReady)
 
 	rr := &odhtype.ReconciliationRequest{
@@ -416,7 +416,7 @@ func TestComputeModulesStatusDetailed_StatusError_SubmodulesNotMarkedRemoved(t *
 	err := ComputeModulesStatusDetailed(t.Context(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscApi.DataScienceCluster)
 	g.Expect(ok).Should(BeTrue())
 
 	batchCond := rr.Conditions.GetCondition("BatchGatewayReady")
@@ -455,7 +455,7 @@ func TestComputeModulesStatusDetailed_StaleStatus_SubmodulesNotMarkedRemoved(t *
 	err := ComputeModulesStatusDetailed(t.Context(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscApi.DataScienceCluster)
 	g.Expect(ok).Should(BeTrue())
 
 	batchCond := rr.Conditions.GetCondition("BatchGatewayReady")
